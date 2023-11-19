@@ -2,10 +2,13 @@ package router
 
 import (
 	"fmt"
+	"strings"
 
+	goaway "github.com/TwiN/go-away"
 	"github.com/gin-gonic/gin"
 	"github.com/lakrsv/profanity-crawler/api/swagger"
 	"github.com/lakrsv/profanity-crawler/api/types"
+	"github.com/lakrsv/profanity-crawler/internal/app/crawler"
 	"github.com/thinkerou/favicon"
 	"github.com/zc2638/swag"
 )
@@ -39,6 +42,48 @@ func (DefaultRouter) StartCrawl(c *gin.Context) {
 		return
 	}
 	fmt.Println(crawlRequest)
+
+	ch := make(chan string)
+	go crawler.Crawl(crawlRequest.Url, crawlRequest.Depth, ch)
+
+	falsePositives := []string{
+		"parse",
+		"charset",
+		"slutat",
+		"thorny",
+		"analogous",
+		"assembly",
+		"assemble",
+		"ballstorp",
+		"cockatoo",
+		"sexual",
+		"hearse",
+		"hancock",
+		"peacock",
+		"assault",
+		"button",
+		"kick-ass",
+		"starsector",
+		"atwater",
+		"smartwatch",
+		"gamecocks",
+		"stassi",
+		"associée",
+		"associant",
+	}
+	falsePositives = append(falsePositives, goaway.DefaultFalsePositives...)
+
+	detector := goaway.NewProfanityDetector().WithSanitizeLeetSpeak(false).WithSanitizeSpecialCharacters(false).WithSanitizeAccents(false).WithSanitizeSpaces(false).WithCustomDictionary(goaway.DefaultProfanities, falsePositives, goaway.DefaultFalseNegatives)
+
+	for msg := range ch {
+		for _, line := range strings.Split(msg, "\n") {
+			swear := detector.ExtractProfanity(line)
+			if swear != "" {
+				fmt.Println("Swear found: ", swear, " in text: ", line)
+			}
+		}
+	}
+	fmt.Println("Done")
 }
 
 func (DefaultRouter) GetCrawl(c *gin.Context) {
