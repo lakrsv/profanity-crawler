@@ -73,11 +73,17 @@ func Crawl(crawlUrl string, maxDepth int, ch chan string) {
 	if err != nil {
 		panic(err)
 	}
+
 	c := colly.NewCollector(
 		colly.MaxDepth(maxDepth),
 		colly.Async(true),
 		colly.AllowedDomains(u.Host),
-		colly.IgnoreRobotsTxt())
+		//colly.URLFilters(regexp.MustCompile(".*"+u.Hostname()+".*")),
+		//colly.IgnoreRobotsTxt()
+	)
+
+	c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 10})
+
 	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
 		e.Request.Visit(e.Attr("href"))
 	})
