@@ -43,7 +43,7 @@ func (DefaultRouter) StartCrawl(c *gin.Context) {
 	}
 	fmt.Println(crawlRequest)
 
-	ch := make(chan string)
+	ch := make(chan crawler.CrawlResult)
 	go crawler.Crawl(crawlRequest.Url, crawlRequest.Depth, ch)
 
 	falsePositives := []string{
@@ -75,11 +75,18 @@ func (DefaultRouter) StartCrawl(c *gin.Context) {
 
 	detector := goaway.NewProfanityDetector().WithSanitizeLeetSpeak(false).WithSanitizeSpecialCharacters(false).WithSanitizeAccents(false).WithSanitizeSpaces(false).WithCustomDictionary(goaway.DefaultProfanities, falsePositives, goaway.DefaultFalseNegatives)
 
-	for msg := range ch {
-		for _, line := range strings.Split(msg, "\n") {
+	for res := range ch {
+		if res.Error() != nil {
+			fmt.Println("Got error", res.Error())
+			continue
+		}
+		for _, line := range strings.Split(res.Body(), "\n") {
 			swear := detector.ExtractProfanity(line)
 			if swear != "" {
-				fmt.Println("Swear found: ", swear, " in text: ", line)
+				if len(line) > 50 {
+					line = line[:50] + "..."
+				}
+				fmt.Println("Swear found: ", swear, " in url: ", res.Path(), " in text: ", line)
 			}
 		}
 	}

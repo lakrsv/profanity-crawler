@@ -1,7 +1,6 @@
 package crawler
 
 import (
-	"fmt"
 	"math/rand"
 	"net/url"
 
@@ -67,19 +66,38 @@ var userAgents = []string{
 	"Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
 }
 
-func Crawl(crawlUrl string, maxDepth int, ch chan string) {
+type CrawlResult struct {
+	path string
+	body string
+	err  error
+}
+
+func (c *CrawlResult) Path() string {
+	return c.path
+}
+
+func (c *CrawlResult) Body() string {
+	return c.body
+}
+
+func (c *CrawlResult) Error() error {
+	return c.err
+}
+
+func Crawl(crawlUrl string, maxDepth int, ch chan CrawlResult) {
 	defer close(ch)
 	u, err := url.Parse(crawlUrl)
 	if err != nil {
-		panic(err)
+		ch <- CrawlResult{"", "", err}
+		return
 	}
 
 	c := colly.NewCollector(
 		colly.MaxDepth(maxDepth),
 		colly.Async(true),
-		colly.AllowedDomains(u.Host),
+		colly.AllowedDomains(u.Hostname()),
 		//colly.URLFilters(regexp.MustCompile(".*"+u.Hostname()+".*")),
-		//colly.IgnoreRobotsTxt()
+		//colly.IgnoreRobotsTxt(),
 	)
 
 	c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 10})
@@ -88,7 +106,7 @@ func Crawl(crawlUrl string, maxDepth int, ch chan string) {
 		e.Request.Visit(e.Attr("href"))
 	})
 	c.OnHTML("body", func(e *colly.HTMLElement) {
-		ch <- e.Text
+		ch <- CrawlResult{e.Request.URL.Path, e.Text, nil}
 	})
 	c.OnRequest(func(r *colly.Request) {
 		// Fake headers to avoid bot detection
@@ -106,12 +124,12 @@ func Crawl(crawlUrl string, maxDepth int, ch chan string) {
 		r.Headers.Set("User-Agent", userAgents[rand.Intn(len(userAgents))])
 	})
 	c.OnError(func(r *colly.Response, err error) {
-		fmt.Println("Got error", err)
+		ch <- CrawlResult{"", "", err}
 	})
 
 	err = c.Visit(crawlUrl)
 	if err != nil {
-		fmt.Println("Got error", err)
+		ch <- CrawlResult{"", "", err}
 	}
 	c.Wait()
 }
